@@ -1,15 +1,18 @@
 import StaticServer from 'react-native-static-server';
 
-import RNFetchBlob from 'rn-fetch-blob';
+import RNFetchBlob from 'react-native-blob-util';
 
 import { unzip } from 'react-native-zip-archive';
 
 const Dirs = RNFetchBlob.fs.dirs;
 
+
 if (!global.Blob) {
   global.Blob = RNFetchBlob.polyfill.Blob;
 }
-
+if (!global.XMLHttpRequest) {
+  global.XMLHttpRequest = RNFetchBlob.polyfill.XMLHttpRequest;
+}
 const Uri = require('epubjs/lib/utils/url');
 
 class EpubStreamer {
