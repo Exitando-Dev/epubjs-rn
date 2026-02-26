@@ -1,18 +1,19 @@
-import StaticServer from 'react-native-static-server';
-
 import RNFetchBlob from 'react-native-blob-util';
-
+import StaticServer from 'react-native-static-server';
 import { unzip } from 'react-native-zip-archive';
 
 const Dirs = RNFetchBlob.fs.dirs;
 
-
 if (!global.Blob) {
   global.Blob = RNFetchBlob.polyfill.Blob;
+}
+if (!global.File) {
+  global.File = RNFetchBlob.polyfill.File;
 }
 if (!global.XMLHttpRequest) {
   global.XMLHttpRequest = RNFetchBlob.polyfill.XMLHttpRequest;
 }
+
 const Uri = require('epubjs/lib/utils/url');
 
 class EpubStreamer {
@@ -81,23 +82,24 @@ class EpubStreamer {
 
     return RNFetchBlob.config({
       fileCache: true,
-      path: Dirs.DocumentDir + '/' + filename,
+      path: `${Dirs.DocumentDir}/${filename}`,
     })
       .fetch('GET', bookUrl)
-      .then((res) => {
+      .then(async (res) => {
         const sourcePath = res.path();
         const targetPath = `${Dirs.DocumentDir}/${this.root}/${filename}`;
         const url = `${this.serverOrigin}/${filename}/`;
 
-        return unzip(sourcePath, targetPath).then((path) => {
-          this.urls.push(bookUrl);
-          this.locals.push(url);
-          this.paths.push(path);
+        await unzip(sourcePath, targetPath);
 
-          // res.flush();
+        // Optionally delete temp download
+        await RNFetchBlob.fs.unlink(sourcePath).catch(() => {});
 
-          return url;
-        });
+        this.urls.push(bookUrl);
+        this.locals.push(url);
+        this.paths.push(targetPath);
+
+        return url;
       });
   }
 
@@ -131,22 +133,24 @@ class EpubStreamer {
     return finalFileName;
   }
 
-  remove(path) {
-    return RNFetchBlob.fs
-      .lstat(path)
-      .then((stats) => {
-        const index = this.paths.indexOf(path);
+  async remove(path) {
+    try {
+      await RNFetchBlob.fs.unlink(path);
+      const index = this.paths.indexOf(path);
+      if (index > -1) {
         this.paths.splice(index, 1);
         this.urls.splice(index, 1);
         this.locals.splice(index, 1);
-      })
-      .catch((err) => {});
+      }
+    } catch (err) {
+      console.warn('Failed to remove path:', path, err);
+    }
   }
 
-  clean() {
-    this.paths.forEach((path) => {
-      this.remove(path);
-    });
+  async clean() {
+    for (const path of [...this.paths]) {
+      await this.remove(path);
+    }
   }
 }
 
